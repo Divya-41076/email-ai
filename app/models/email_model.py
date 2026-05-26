@@ -1,16 +1,13 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
-
+from app.db.database import Base
 from sqlalchemy.dialects.postgresql import JSONB
 
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List
 
-from app.db.database import Base
-
 # sqlalchemy models - database tables
-
 class Email(Base):
     __tablename__ = "emails"
 
@@ -60,8 +57,7 @@ class AnalysisOutput(BaseModel):
 
     class Config:
         from_attributes = True # allows pydantic to read from sqlalchemy model attributes directly
-
-
+        
 class EmailResponse(BaseModel):
     id: int
     subject: str
@@ -71,7 +67,6 @@ class EmailResponse(BaseModel):
 
     class Config:
         from_attributes = True # allows pydantic to read from sqlalchemy model attributes directly
-
 
 # backend returns sqlalchemy objects like
 # email = db.query(email).first()
