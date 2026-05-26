@@ -16,22 +16,28 @@ def get_gmail_credentials():
 
     # load existing token if exists
     if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE,'rb') as token:
-            creds = pickle.load(token)
+        try:
+             with open(TOKEN_FILE,'rb') as token:
+                creds = pickle.load(token)
+        except Exception as e:
+            creds = None
 
     # if no valid credentials, start auth flow or authenticate
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            # refresh expired token
-            creds.refresh(Request())
-        else:
-            # start the auth flow - for first time login or no valid token
-            flow = InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_FILE, SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-        
-        with open(TOKEN_FILE, 'wb')as token:
-            pickle.dump(creds,token)
+        try:
+            if creds and creds.expired and creds.refresh_token:
+                # refresh expired token
+                creds.refresh(Request())
+            else:
+                # start the auth flow - for first time login or no valid token
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CREDENTIALS_FILE, SCOPES
+                )
+                creds = flow.run_local_server(port=0)
+            
+            with open(TOKEN_FILE, 'wb')as token:
+                pickle.dump(creds,token)
+        except Exception as e:
+            raise RuntimeError(f"Failed to get Gmail credentials: {str(e)}")
 
     return creds

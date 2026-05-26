@@ -1,67 +1,84 @@
+import base64
 import logging
-from datetime import datetime
-from googleapiclient.discovery import build # builds gmail api client service obj to talk to gmail
-from app.utils.gmail_auth import get_gmail_credentials #validates the credentials login/refresh token
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
-import base64 #gmail sends emailbody encoded so we must decode it
-import email as email_parser
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+from app.utils.gmail_auth import get_gmail_credentials
 
 logger = logging.getLogger(__name__)
 
-#extracting email body
-def get_email_body(payload):
+# helper func
+def get_email_body(payload: dict) -> str:
+    """Extract plain-text body from a Gmail message payload."""
     body = ""
 
     if "parts" in payload:
         for part in payload["parts"]:
             if part["mimeType"] == "text/plain":
                 data = part["body"].get("data", "")
-
                 if data:
                     body = base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
                     break
-
-    else:#sm email dont hv parts, directly hv the body
+    else:
+        # Some emails don't have parts — body is at the top level
         data = payload.get("body", {}).get("data", "")
         if data:
             body = base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
 
-            
     return body.strip()
 
-#MAIN FLOWWWWW
-def fetch_emails(max_results: int = 10):
+# helper func 
+def parse_email_date(date_str: str) -> datetime:
+    """Parse the RFC 2822 Date header from an email. Falls back to now on failure."""
+    if not date_str:
+        return datetime.now(timezone.utc)
     try:
-        creds = get_gmail_credentials()#gets auth code from before and validates it, refreshes if expired, or starts auth flow if no valid token
+        parsed = parsedate_to_datetime(date_str)
+        # Ensure timezone-aware
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except (TypeError, ValueError) as e:
+        logger.warning(f"[Fetcher] Could not parse Date header '{date_str}': {e}")
+        return datetime.now(timezone.utc)
 
-        print(f"CREDS VALID: {creds.valid}")
-        print(f"CREDS EXPIRED: {creds.expired}")
 
-        service = build("gmail", "v1", credentials=creds)#creates the GMAIL API client service obj to talk to gmail api
+def fetch_emails(max_results: int = 10) -> list[dict]:
+    """
+    Fetch up to `max_results` unread inbox emails from Gmail.
 
-        # fetch unread emails max upto 10 emails
-        results = service.users().messages().list(
-            userId="me",
-            labelIds=["INBOX"],
-            q="is:unread",
-            maxResults=max_results
-        ).execute()
+    Raises:
+        - googleapiclient.errors.HttpError on Gmail API failures
+        - google.auth.exceptions.RefreshError on OAuth token issues
+        - Other exceptions propagate to the caller (pipeline guards against them)
+    """
+    creds = get_gmail_credentials()
+    service = build("gmail", "v1", credentials=creds)
 
-        print(f"RAW RESULTS: {results}")
+    # fetch unread emails, max upto `max_results`
+    results = service.users().messages().list(
+        userId="me",
+        labelIds=["INBOX"],
+        q="is:unread",
+        maxResults=max_results,
+    ).execute()
 
-        messages = results.get("messages", [])
-        print(F"gmail returned:{len(messages)} messages")
+    messages = results.get("messages", [])
+    logger.info(f"[Fetcher] Gmail returned {len(messages)} unread message(s)")
 
-        if not messages:
-            logger.info("[Fetcher] No unread emails found")
-            return []
+    if not messages:
+        return []
 
-        emails = []
-        for msg in messages:
+    emails = []
+    for msg in messages:
+        try:
             msg_data = service.users().messages().get(
                 userId="me",
                 id=msg["id"],
-                format="full"
+                format="full",
             ).execute()
 
             headers = msg_data["payload"]["headers"]
@@ -69,26 +86,22 @@ def fetch_emails(max_results: int = 10):
             sender = next((h["value"] for h in headers if h["name"] == "From"), "Unknown")
             date_str = next((h["value"] for h in headers if h["name"] == "Date"), None)
 
-            #a generator expression that iterates through the headers
-            # produces values one-by-one(lazy) instead of creating a full list in memory
-
             body = get_email_body(msg_data["payload"])
 
             emails.append({
                 "gmail_message_id": msg["id"],
                 "subject": subject,
                 "sender": sender,
-                "body": body[:2000],  # limit body length
-                "received_at": datetime.utcnow()
+                "body": body[:2000],  # cap body length to control LLM token usage
+                "received_at": parse_email_date(date_str),
             })
+        except HttpError as e:
+            # Per-message failure: log and skip, don't fail the whole batch
+            logger.error(f"[Fetcher] Failed to fetch message {msg['id']}: {e}")
+            continue
 
-        logger.info(f"[Fetcher] Fetched {len(emails)} emails")
-        return emails
-
-    except Exception as e:
-        logger.error(f"[Fetcher] Failed to fetch emails: {str(e)}")
-        return []
-
+    logger.info(f"[Fetcher] Successfully fetched {len(emails)} email(s)")
+    return emails
 
 
 

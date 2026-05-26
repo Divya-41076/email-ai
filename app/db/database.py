@@ -1,25 +1,3 @@
-# from sqlalchemy import create_engine
-# from app.config import DATABASE_URL # DB connection string from evn
-# from sqlalchemy.orm import sessionmaker # used to create DB sessions
-# from sqlalchemy.ext.declarative import declarative_base # used to define ORM models - tables in db
-
-# engine = create_engine(DATABASE_URL) # this creates a db conn = entry point to the db
-
-# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) # factory for creating db sessions and connect session to db
-
-# Base = declarative_base() #all your models will inherit from this
-
-# def get_db(): #fastapi dependency to get db session for each request and close it after
-#     db = SessionLocal()
-#     try:
-#         yield db
-#     finally:
-#         db.close()
-
-# def create_tables():
-#     import app.models.email_model
-#     Base.metadata.create_all(bind=engine)
-
 import logging
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -35,7 +13,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-
+# dependency injection for the routes to get a db session
 def get_db():
     db = SessionLocal()
     try:
@@ -47,7 +25,7 @@ def get_db():
     finally:
         db.close()
 
-
+# this is lazy creation of tables - they will be created o startup if they dont exist, but we avoid importing models ar the module level to prevent circular imports
 def create_tables():
     try:
         import app.models.email_model
@@ -55,9 +33,9 @@ def create_tables():
         logger.info("[DB] Tables created successfully.")
     except SQLAlchemyError as e:
         logger.error(f"[DB] Failed to create tables: {str(e)}")
-        raise
+        raise #re-raise to prevent app from starting if we cant create the tables
 
-
+# simple check to see if the DB is alive by exe a small query.
 def check_db_connection():
     try:
         with engine.connect() as conn:
