@@ -1,7 +1,8 @@
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from app.services.email_fetcher import fetch_emails
+
+from app.services.gmail_client import GmailClient
 from app.services.ai_analyzer import analyze_email
 from app.services.decision_engine import process_email_decision
 from app.services.automation_service import execute_action
@@ -14,12 +15,14 @@ def run_pipeline(db: Session) -> dict:
     results = []
     failed = []
 
-    # top-level fetch guard — if Gmail itself fails, abort early
+    # build one Gmail client per pipeline run, then fetch unread emails.
+    # if auth or fetch fails, abort early — none of the rest can proceed without emails.
     try:
-        emails = fetch_emails()
+        gmail = GmailClient()
+        emails = gmail.fetch_unread()
     except Exception as e:
-        logger.error(f"[Pipeline] Email fetch failed entirely: {str(e)}")
-        return {"processed": 0, "failed": 0, "results": [], "error": "Email fetch failed"}
+        logger.error(f"[Pipeline] Gmail client / fetch failed: {str(e)}")
+        return {"processed": 0, "failed": 0, "results": [], "error": "Gmail fetch failed"}
 
     if not emails:
         logger.info("[Pipeline] No emails to process.")
@@ -45,17 +48,17 @@ def run_pipeline(db: Session) -> dict:
                 subject=email_data["subject"],
                 sender=email_data["sender"],
                 body=email_data["body"],
-                received_at=email_data["received_at"]
+                received_at=email_data["received_at"],
             )
             db.add(email_record)
             db.commit()
             db.refresh(email_record)
 
             # step 3 — create analysis record with status "processing"
-            # so if something fails mid-way, we have a record of it
+            # so if something fails mid-way, we have an audit trail
             analysis_record = EmailAnalysis(
                 email_id=email_record.id,
-                status="processing"
+                status="processing",
             )
             db.add(analysis_record)
             db.commit()
@@ -64,14 +67,20 @@ def run_pipeline(db: Session) -> dict:
             ai_output = analyze_email(
                 subject=email_data["subject"],
                 sender=email_data["sender"],
-                body=email_data["body"]
+                body=email_data["body"],
             )
 
             # step 5 — decision engine
             decision = process_email_decision(email_data, ai_output)
 
             # step 6 — execute automation action
-            execute_action(decision["action"], email_record.id)
+            # NOTE: kwargs at the call site — explicit > positional ambiguity
+            execute_action(
+                action=decision["action"],
+                client=gmail,
+                gmail_message_id=email_data["gmail_message_id"],
+                db_email_id=email_record.id,
+            )
 
             # step 7 — update analysis record with results
             analysis_record.category = decision["category"]
@@ -91,7 +100,7 @@ def run_pipeline(db: Session) -> dict:
                 "action_items": decision["action_items"],
                 "action": decision["action"],
                 "description": decision["description"],
-                "priority_overridden": decision["priority_overridden"]
+                "priority_overridden": decision["priority_overridden"],
             })
 
             logger.info(f"[Pipeline] Processed: {subject}")
@@ -99,7 +108,6 @@ def run_pipeline(db: Session) -> dict:
         except SQLAlchemyError as e:
             logger.error(f"[Pipeline] DB error for '{subject}': {str(e)}")
             db.rollback()
-            # if analysis record was already created, mark it failed
             try:
                 if analysis_record and analysis_record.id:
                     analysis_record.status = "failed"
@@ -127,5 +135,5 @@ def run_pipeline(db: Session) -> dict:
         "processed": len(results),
         "failed": len(failed),
         "results": results,
-        "failures": failed
+        "failures": failed,
     }
