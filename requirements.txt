@@ -57,3 +57,4 @@ uritemplate==4.2.0
 urllib3==2.6.3
 uvicorn==0.42.0
 wrapt==2.1.2
+icalendar==5.1.1

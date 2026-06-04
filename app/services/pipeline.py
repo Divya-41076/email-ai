@@ -12,7 +12,6 @@ from app.models.email_model import Email, EmailAnalysis
 
 logger = logging.getLogger(__name__)
 
-
 def run_pipeline(db: Session) -> dict:
     results = []
     failed = []
@@ -97,7 +96,7 @@ def run_pipeline(db: Session) -> dict:
                 email_context = email_context
             )
 
-            #  update analysis record with results
+            #  update table email analysis with 'analysis record' with results
             analysis_record.category = decision["category"]
             analysis_record.priority = decision["priority"]
             analysis_record.summary = decision["summary"]
@@ -173,3 +172,11 @@ def run_pipeline(db: Session) -> dict:
         "failures": failed,
     }
 
+
+# record - db record 
+# email_data - dict from gmail client
+# ai_output - dict from ai analyzer
+# decision - dict from decision engine
+# action_result - dict from automation service
+# email_context - dict with email subject, sender, summary and action items, used mainly for notifications
+# result - final dict we build for the output of the pipeline, which includes all relevant info and timings for observability and debugging

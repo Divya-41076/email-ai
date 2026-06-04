@@ -1,9 +1,13 @@
 import json
 import re
+import logging
+
 from groq import Groq
 from app.config import GROQ_API_KEY
 from app.utils.prompts import EMAIL_ANALYSIS_PROMPT
+from datetime import datetime
 
+logger = logging.getLogger(__name__)
 # create a groq client
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -18,8 +22,13 @@ def validate_analysis(result:dict) ->dict:
         "category": result.get("category", "Other"),
         "priority": result.get("priority", "Low"),
         "summary": result.get("summary", "No summary available."),
-        "action_items": result.get("action_items", [])
+        "action_items": result.get("action_items", []),
+        "event_datetime": result.get("event_datetime"),
+        "duration_minutes": result.get("duration_minutes"),
+        "location_or_link": result.get("location_or_link"),
+
     }
+
     # validate category is an allowed value
     if validated["category"] not in VALID_CATEGORIES:
         validated["category"] = "Other"
@@ -40,6 +49,50 @@ def validate_analysis(result:dict) ->dict:
             str(item) for item in validated["action_items"]
             if item
         ][:5]  # max 5 items
+    
+    # validate the event date time
+    if validated["event_datetime"] is not None:
+        if isinstance(validated["event_datetime"], str):
+            try:
+                dt_str = validated["event_datetime"].replace("Z", "+00:00")
+                datetime.fromisoformat(dt_str)
+
+            except (ValueError, TypeError):
+                logger.warning(f"[Analyser] Invalid event_datetime '{validated['event_datetime']}': {e} - setting to null")
+                validated["event_datetime"] = None
+        else:
+            # not a string set to null
+            validated["event_datetime"] = None
+
+     #  Validate duration_minutes (positive int or null) 
+    if validated["duration_minutes"] is not None:
+        try:
+            duration = int(validated["duration_minutes"])
+            if duration > 0:
+                validated["duration_minutes"] = duration
+            else:
+                logger.warning(
+                    f"[Analyzer] Invalid duration_minutes {duration}: must be > 0 — setting to null"
+                )
+                validated["duration_minutes"] = None
+        except (ValueError, TypeError):
+            logger.warning(
+                f"[Analyzer] Invalid duration_minutes '{validated['duration_minutes']}': not an integer — setting to null"
+            )
+            validated["duration_minutes"] = None  
+
+     #  Validate location_or_link (string or null) 
+    if validated["location_or_link"] is not None:
+        if isinstance(validated["location_or_link"], str):
+            validated["location_or_link"] = validated["location_or_link"].strip()
+            # If empty after stripping, set to null
+            if not validated["location_or_link"]:
+                validated["location_or_link"] = None
+        else:
+            # Not a string, set to null
+            validated["location_or_link"] = None
+
+
 
     return validated
 
@@ -81,16 +134,26 @@ def analyze_email(subject:str,sender:str,body:str)->dict:
         return validate_analysis(result)
     
     except json.JSONDecodeError:
-        return{
-            "category":"other",
-            "priority":"low",
-            "summary":"Could not analyse email.",
-            "action_items":[]
+            # LLM returned something unparseable
+            # fall back to safe defaults
+        return {
+            "category": "Other",
+            "priority": "Low",
+            "summary": "Could not analyse email.",
+            "action_items": [],
+            "event_datetime": None,
+            "duration_minutes": None,
+            "location_or_link": None,
         }
     except Exception as e:
-        return{
-            "category":"other",
-            "priority":"low",
-            "summary":f"Error analyzing email: {str(e)}",
-            "action_items":[]
+        return {
+            "category": "Other",
+            "priority": "Low",
+            "summary": f"Error analyzing email: {str(e)}",
+            "action_items": [],
+            "event_datetime": None,
+            "duration_minutes": None,
+            "location_or_link": None,
         }
+    
+    

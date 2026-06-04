@@ -35,6 +35,15 @@ class EmailAnalysis(Base):
     status = Column(String, default="queued")
     processed_at = Column(DateTime, default=datetime.utcnow)
 
+    event_datetime = Column(DateTime, nullable=True)
+    event_duration_minutes = Column(Integer, nullable=True)
+    event_location = Column(String, nullable=True)
+    ics_file_path = Column(String, nullable=True)  # path where ICS was saved
+    
+    # timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
     email = relationship("Email", back_populates="analysis")
 
 
