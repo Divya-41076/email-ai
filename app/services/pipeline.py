@@ -103,6 +103,13 @@ def run_pipeline(db: Session) -> dict:
             analysis_record.action_items = decision["action_items"]
             analysis_record.automation_action = decision["action"]
             
+            analysis_record.event_datetime = ai_output.get("event_datetime")
+            analysis_record.event_duration_minutes = ai_output.get("duration_minutes")
+            analysis_record.event_location = ai_output.get("location_or_link")
+
+            if action_result.get("ics_file_path"):
+                analysis_record.ics_file_path = action_result["ics_file_path"]
+
             if action_result.get("status") == "success":
                 analysis_record.status = "done"
 

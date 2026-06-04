@@ -5,7 +5,7 @@ import logging
 from groq import Groq
 from app.config import GROQ_API_KEY
 from app.utils.prompts import EMAIL_ANALYSIS_PROMPT
-from datetime import datetime
+from datetime import datetime,date
 
 logger = logging.getLogger(__name__)
 # create a groq client
@@ -103,10 +103,12 @@ def analyze_email(subject:str,sender:str,body:str)->dict:
 
     # build the prompt
 
+    current_date = date.today().isoformat()
     prompt = EMAIL_ANALYSIS_PROMPT.format(
         subject=subject,
         sender=sender,
-        body=body
+        body=body,
+        current_date=current_date
     )
     try:
     # call groqapi
@@ -155,5 +157,4 @@ def analyze_email(subject:str,sender:str,body:str)->dict:
             "duration_minutes": None,
             "location_or_link": None,
         }
-    
     
