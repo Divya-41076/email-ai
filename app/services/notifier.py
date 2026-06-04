@@ -32,7 +32,7 @@ def send_slack_notification(
         return False
 
     # Build Gmail deep link so user can click through
-    gmail_link = f"https://mail.google.com/mail/u/0/#inbox/{gmail_message_id}"
+    gmail_link = f"https://mail.google.com/mail/u/0/#all/{gmail_message_id}"
 
     # Slack Block Kit format (richer than plain text)
     payload = {
