@@ -82,12 +82,19 @@ def run_pipeline(db: Session) -> dict:
 
             # execute automation action
             # NOTE: kwargs at the call site — explicit > positional ambiguity
+            email_context = {
+                    "subject": email_data["subject"],
+                    "sender": email_data["sender"],
+                    "summary": decision["summary"],
+                    "action_items": decision["action_items"],
+                }
             
             action_result = execute_action(
                 action=decision["action"],
                 client=gmail,
                 gmail_message_id=email_data["gmail_message_id"],
                 db_email_id=email_record.id,
+                email_context = email_context
             )
 
             #  update analysis record with results
@@ -165,3 +172,4 @@ def run_pipeline(db: Session) -> dict:
         "results": results,
         "failures": failed,
     }
+

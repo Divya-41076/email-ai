@@ -2,6 +2,7 @@ import logging
 from googleapiclient.errors import HttpError
 
 from app.services.gmail_client import GmailClient
+from app.services.notifier import send_slack_notification
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +13,9 @@ logger = logging.getLogger(__name__)
 #   client            — GmailClient instance (one per pipeline run)
 #   gmail_message_id  — Gmail's message ID, used for actual API mutations
 #   db_email_id       — our DB row id, used for logging and result tracking
+#   email_context     - which is used only mainly by notify and impotant
 
-def mark_priority(client: GmailClient, gmail_message_id: str, db_email_id: int) -> dict:
+def mark_priority(client: GmailClient, gmail_message_id: str, db_email_id: int, email_context : dict) -> dict:
     try:
         client.add_label(gmail_message_id,["STARRED","IMPORTANT"])
         logger.info(f"[Automation] mark_priority stub — gmail_id={gmail_message_id}, db_id={db_email_id}")
@@ -22,13 +24,21 @@ def mark_priority(client: GmailClient, gmail_message_id: str, db_email_id: int) 
         logger.error(f"[Automation] mark_priority failed db_id={db_email_id}: {e}")
         return {"status": "error", "action":"mark_priority","email_id":db_email_id, "error":str(e)}
 
-def mark_priority_and_notify(client: GmailClient, gmail_message_id: str, db_email_id: int) -> dict:
+def mark_priority_and_notify(client: GmailClient, gmail_message_id: str, db_email_id: int, email_context: dict) -> dict:
     try:
         client.add_label(gmail_message_id,["STARRED","IMPORTANT"])
         logger.info(f"[Automation] Starred db_id={db_email_id} gmail_id={gmail_message_id}")
-        logger.info(f"[Automation] Notify placeholder for db_id={db_email_id} - real slack in phase 2")
-        logger.info(f"[Automation] mark_priority_and_notify stub — gmail_id={gmail_message_id}, db_id={db_email_id}")
+        
+        notification_sent = send_slack_notification(
+            title=email_context.get("subject", "Unknown"),
+            summary=email_context.get("summary", ""),
+            action_items=email_context.get("action_items", []),
+            sender=email_context.get("sender", "Unknown"),
+            gmail_message_id=gmail_message_id,
+        )
+
         return {"status": "success", "action": "mark_priority_and_notify", "email_id": db_email_id}
+    
     except HttpError as e:
         logger.error(f"[Automation] mark_priority_and_notify failed db_id={db_email_id:{e}}")
         return {"status": "error", "action": "mark_priority_and_notify", "email_id": db_email_id, "error":str(e)}
@@ -37,8 +47,18 @@ def extract_event(client: GmailClient, gmail_message_id: str, db_email_id: int) 
     logger.info(f"[Automation] extract_event stub — gmail_id={gmail_message_id}, db_id={db_email_id}")
     return {"status": "success", "action": "extract_event", "email_id": db_email_id}
 
-def extract_event_and_notify(client: GmailClient, gmail_message_id: str, db_email_id: int) -> dict:
+def extract_event_and_notify(client: GmailClient, gmail_message_id: str, db_email_id: int, email_context:dict) -> dict:
+    
     logger.info(f"[Automation] extract_event_and_notify stub — gmail_id={gmail_message_id}, db_id={db_email_id}")
+    
+    notification_sent = send_slack_notification(
+        title=email_context.get("subject", "Unknown"),
+        summary=email_context.get("summary", ""),
+        action_items=email_context.get("action_items", []),
+        sender=email_context.get("sender", "Unknown"),
+        gmail_message_id=gmail_message_id,
+    )
+    
     return {"status": "success", "action": "extract_event_and_notify", "email_id": db_email_id}
 
 
@@ -94,11 +114,11 @@ ACTION_MAP = {
 }
 
 
-def execute_action(action: str, client: GmailClient, gmail_message_id: str, db_email_id: int) -> dict:
+def execute_action(action: str, client: GmailClient, gmail_message_id: str, db_email_id: int,email_context:dict) -> dict:
     handler = ACTION_MAP.get(action)
 
     if not handler:
         logger.warning(f"[Automation] Unknown action '{action}' for db_id={db_email_id}")
         return {"status": "unknown_action", "action": action, "email_id": db_email_id}
 
-    return handler(client, gmail_message_id, db_email_id)
+    return handler(client, gmail_message_id, db_email_id, email_context)
