@@ -114,12 +114,15 @@ class GmailClient:
 
     # ─── WRITE PRIMITIVES (used by automation_service) ───────────────
 
-    def add_label(self, gmail_message_id: str, label: str) -> None:
-        """Add a Gmail label (e.g. 'STARRED') to a message."""
+    def add_label(self, gmail_message_id: str, labels: str) -> None:
+        """Add one or more Gmail label (e.g. 'STARRED') to a message."""
+        
+        if isinstance(labels,str):
+            labels = [labels]
         self.service.users().messages().modify(
             userId="me",
             id=gmail_message_id,
-            body={"addLabelIds": [label]},
+            body={"addLabelIds": [labels]},
         ).execute()
 
     def remove_label(self, gmail_message_id: str, label: str) -> None:
