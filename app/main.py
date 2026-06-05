@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from app.api.routes import router
 from app.db.database import create_tables, check_db_connection
+from app.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,11 +25,12 @@ async def lifespan(app: FastAPI):
     if not check_db_connection():
         raise RuntimeError("Cannot connect to database. Check DATABASE_URL.")
     create_tables()
+    start_scheduler()  # AFTER create_tables — first tick may touch the tables
     logger.info("[Startup] Ready.")
     yield
     # shutdown
     logger.info("[Shutdown] Shutting down.")
-
+    stop_scheduler()
 
 app = FastAPI(
     title="Email Intelligence Agent",

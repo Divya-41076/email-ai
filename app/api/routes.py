@@ -8,6 +8,9 @@ from app.services.pipeline import run_pipeline
 from app.models.email_model import Email, EmailAnalysis
 import logging
 
+from app.scheduler import scheduler, JOB_ID
+from app.config import SCHEDULER_INTERVAL_MINUTES
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,3 +119,13 @@ def stats(db: Session = Depends(get_db)):
     except SQLAlchemyError as e:
         logger.error(f"[Routes]DB error on /stats: {str(e)}")
         raise HTTPException(status_code=500, detail="Database error while fetching stats.")
+
+@router.get("/scheduler/status")
+def scheduler_status():
+    job = scheduler.get_job(JOB_ID)
+    next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
+    return {
+        "running": scheduler.running,
+        "next_run": next_run,          # ISO 8601, UTC (APScheduler default tz)
+        "interval_minutes": SCHEDULER_INTERVAL_MINUTES,
+    }
