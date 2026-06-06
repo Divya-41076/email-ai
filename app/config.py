@@ -9,7 +9,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID") #identitfies my app to google oauth
 GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET")
 
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
 CLOUDWATCH_LOG_GROUP = os.getenv("CLOUDWATCH_LOG_GROUP", "email-agent")
 
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
