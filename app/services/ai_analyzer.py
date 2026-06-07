@@ -57,7 +57,7 @@ def validate_analysis(result:dict) ->dict:
                 dt_str = validated["event_datetime"].replace("Z", "+00:00")
                 datetime.fromisoformat(dt_str)
 
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
                 logger.warning(f"[Analyser] Invalid event_datetime '{validated['event_datetime']}': {e} - setting to null")
                 validated["event_datetime"] = None
         else:
