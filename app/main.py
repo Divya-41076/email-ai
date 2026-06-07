@@ -1,4 +1,6 @@
 import logging
+import boto3
+import watchtower
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -9,12 +11,34 @@ from contextlib import asynccontextmanager
 from app.api.routes import router
 from app.db.database import create_tables, check_db_connection
 from app.scheduler import start_scheduler, stop_scheduler
+from app.config import AWS_REGION, CLOUDWATCH_LOG_GROUP 
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# cloudwatch handler 
+# CloudWatch handler — only attach if running on AWS (IAM role available).
+# Local dev has no IAM role attached, so boto3 will fail to authenticate
+# and we silently skip CloudWatch logging. The app still logs to stdout.
+if AWS_REGION and CLOUDWATCH_LOG_GROUP:
+    try:
+        
+        cw_handler = watchtower.CloudWatchLogHandler(
+            log_group=CLOUDWATCH_LOG_GROUP,
+            stream_name="inboxiq-app",
+            boto3_client=boto3.client("logs", region_name=AWS_REGION)
+        )
+        cw_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+        ))
+        logging.getLogger().addHandler(cw_handler)
+        logger.info(f"[CloudWatch] Logs streaming to '{CLOUDWATCH_LOG_GROUP}' in {AWS_REGION}")
+    except Exception as e:
+        logger.warning(f"[CloudWatch] Failed to attach handler: {e}. Continuing with stdout only.")
+
 
 limiter = Limiter(key_func=get_remote_address)
 

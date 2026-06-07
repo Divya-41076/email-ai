@@ -7,6 +7,10 @@ from app.db.database import get_db
 from app.services.pipeline import run_pipeline
 from app.models.email_model import Email, EmailAnalysis
 import logging
+from fastapi.responses import JSONResponse
+
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from app.scheduler import scheduler, JOB_ID
 from app.config import SCHEDULER_INTERVAL_MINUTES
@@ -129,3 +133,30 @@ def scheduler_status():
         "next_run": next_run,          # ISO 8601, UTC (APScheduler default tz)
         "interval_minutes": SCHEDULER_INTERVAL_MINUTES,
     }
+
+@router.get("/health/aws")
+def health_aws():
+    """
+    Verifies AWS authentication is working.
+    On EC2 with IAM role attached: returns account/role info.
+    Locally without AWS creds: returns 503 with explanation.
+    """
+    try:
+        sts = boto3.client("sts")
+        identity = sts.get_caller_identity()
+        return {
+            "status": "ok",
+            "account_id": identity["Account"],
+            "arn": identity["Arn"],
+            "user_id": identity["UserId"]
+        }
+    except NoCredentialsError:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "detail": "No AWS credentials available (expected on local dev)"}
+        )
+    except ClientError as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "detail": str(e)}
+        )
